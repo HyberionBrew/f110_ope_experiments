@@ -176,7 +176,7 @@ def main(args):
     torch.manual_seed(args.seed)
 
     save_path = ope_methods.dataset.create_save_dir(
-        experiment_directory = "runs3",
+        experiment_directory = "runs",
         algo=args.dynamics_model,
         reward_name="reward_progress",
         dataset="f110-real-stoch-v2",
@@ -199,7 +199,7 @@ def main(args):
         include_timesteps_in_obs = False,
         set_terminals=True,
         delta_factor=1.0,
-        reward_config="reward_progress.json",
+        reward_config=None,#"reward_progress.json",
         include_pose_time_diff=False,
         include_action_pose_time_diff = False,
         include_time_obs = False,
@@ -218,6 +218,7 @@ def main(args):
         F110Env,
         normalize_states=True,
         normalize_rewards=False,
+        # remove_agents=  F110Env.eval_agents,
         # sequence_length=horizon,
         # remove_agents= [F110Env.eval_agents], # include all agents in the dataset
     )
@@ -233,21 +234,24 @@ def main(args):
         test_model_names = np.random.choice(train_model_names, 0, replace=False)
         train_model_names = np.array([name for name in train_model_names if name not in test_model_names])
         train_indices, test_indices, val_indices = model_split_indices(
-            behavior_dataset,train_model_names =train_model_names,val_model_names=F110Env.eval_agents, test_model_names=test_model_names)
+            behavior_dataset,
+            train_model_names =train_model_names,
+            val_model_names=F110Env.eval_agents, 
+            test_model_names=test_model_names)
 
     elif args.split == "off-family":
         train_indices, test_indices, val_indices = ope_methods.dataset.family_split_indices(
             behavior_dataset, validation_family_name="StochasticContinousFTGAgent")
     else:
         raise NotImplementedError
+
     # save the indices
     np.save(os.path.join(save_path, f"train_indices.npy"), train_indices)
     np.save(os.path.join(save_path, "test_indices.npy"), test_indices)
     np.save(os.path.join(save_path, "val_indices.npy"), val_indices)
 
-    print(len(train_indices))
-    print(len(test_indices))
-    print(len(val_indices))
+    #print()
+    #print(len(val_indices))
     assert np.array([index not in test_indices for index in train_indices]).any()
     assert np.array([index not in val_indices for index in train_indices]).any()
     # assert that none of the arrays is empty
@@ -257,6 +261,11 @@ def main(args):
     train_subset = Subset(behavior_dataset, train_indices)
     test_subset = Subset(behavior_dataset, test_indices)
     val_subset = Subset(behavior_dataset, val_indices)
+    # testset
+    print("# of Agents in train set", len(np.unique(behavior_dataset.model_names[train_indices])), "indices", len(train_indices))
+    # of agents in valiadtion set
+    print("# of Agents in validation set", len(np.unique(behavior_dataset.model_names[val_indices])), "indices", len(val_indices))
+    print("overlap:", len(set(np.unique(behavior_dataset.model_names[train_indices])).intersection(set(np.unique(behavior_dataset.model_names[val_indices])))))
     test_loader = DataLoader(test_subset, batch_size=256, shuffle=False)
     val_loader = DataLoader(val_subset, batch_size=256, shuffle=False)
 
@@ -264,12 +273,15 @@ def main(args):
     inf_dataloader = get_infinite_iterator(train_loader)
     data_iter = iter(inf_dataloader)
 
-    dynamics_model = build_dynamics_model(args.dynamics_model)
+
     
     min_states = behavior_dataset.states.min(axis=0)[0]
     max_states = behavior_dataset.states.max(axis=0)[0]
     min_states[:2] = min_states[:2] - 2.0
     max_states[:2] = max_states[:2] + 2.0
+    dynamics_model = build_dynamics_model(args.dynamics_model,
+                                          min_state=min_states, 
+                                          max_state=max_states)
     ### Define the Model ### 
     model = F110ModelBased(F110Env, behavior_dataset.states.shape[1],
                 behavior_dataset.actions.shape[1],
@@ -313,12 +325,17 @@ def main(args):
             writer.add_scalar(f"train/loss_done", loss_done, global_step=i)
 
         if i % args.eval_interval == 0:
-            if args.skip_eval:
-                continue
+            num_plot = 10
+            model.set_device("cpu")
+            plot_validation_trajectories(behavior_dataset, model, F110Env, val_indices, num_plot, save_path=save_path, file_name=f"rollouts_{i}")
+
             if args.save_model:
                 model.save(save_path, filename=f"model_{args.seed}_{i}.pth")
+            if args.skip_eval: #and (args.update_steps - args.eval_interval > i): # do one evaluation at the end
+                continue
+
             # compute the mse of the model on the test and validation set
-            model.set_device("cpu")
+
             #average_mse_test, std_dev_mse_test = evaluate_model(test_loader, model)
             average_mse_val, std_dev_mse_val = evaluate_model(val_loader, model)
             #writer.add_scalar(f"test/mse_single", average_mse_test, global_step=i)
@@ -326,8 +343,6 @@ def main(args):
             #writer.add_scalar(f"eval/std_mse_test", std_dev_mse_test, global_step=i)
             writer.add_scalar(f"eval/std_mse_val", std_dev_mse_val, global_step=i)
 
-            num_plot = 10
-            plot_validation_trajectories(behavior_dataset, model, F110Env, val_indices, num_plot, save_path=save_path, file_name=f"rollouts_{i}")
 
             val_mse = compute_mse_rollouts(behavior_dataset, model, F110Env, val_indices, rollouts=1)
             writer.add_scalar(f"test/mse_trajectory_25", np.mean(val_mse[:25].numpy()), global_step=i)

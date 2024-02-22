@@ -17,7 +17,7 @@ parser.add_argument('--discount', type=float, default=0.99, help="discount facto
 parser.add_argument('--output_folder', type=str, default="runs3", help="where to save the ground truth rewards")
 parser.add_argument('--zarr_path', type=str, default=None, help="path to the zarr file if not using default")
 args = parser.parse_args()
-
+from create_plots import plot_bars_from_dicts
 
 def main(args):
     # load the dataset:
@@ -48,14 +48,19 @@ def main(args):
         dataset = F110Env.get_dataset()
 
     ground_truth_rewards = {}
-    trajectories, action_trajectories, terminations, model_names = F110Env.compute_trajectories(dataset["observations"],dataset["actions"], dataset["terminals"], dataset["timeouts"], dataset["model_name"])
+    trajectories, action_trajectories, terminations, model_names = F110Env.compute_trajectories(dataset["observations"],
+                                                                                                dataset["actions"],
+                                                                                                dataset["terminals"],
+                                                                                                dataset["timeouts"], 
+                                                                                                dataset["model_name"])
 
 
     for model in tqdm(F110Env.eval_agents):
         model_trajectories = trajectories[model_names == model]
         model_action_trajectories = action_trajectories[model_names == model]
         model_terminations = terminations[model_names == model]
-        # print(model_trajectories)
+        #print(len(model_trajectories))
+        #print(model
         reward = F110Env.compute_reward_trajectories(model_trajectories, model_action_trajectories, model_terminations, args.target_reward)
         discount_factors = args.discount ** np.arange(trajectories.shape[1])
         # Calculate the sum of discounted rewards along axis 1
@@ -65,9 +70,11 @@ def main(args):
             "mean": np.mean(discounted_sums),
             "std": np.std(discounted_sums)
         }
+        
     # write the ground truth rewards to a file
-    with open(f"{args.output_folder}/dataset_rewards_{args.target_reward}", "w") as f:
+    with open(f"{args.output_folder}/gt_{args.target_reward}", "w") as f:
         json.dump(ground_truth_rewards, f)
+    plot_bars_from_dicts([ground_truth_rewards], ["Ground truth"], "Mean discounted reward",plot=True)
     print(ground_truth_rewards)
 
 
