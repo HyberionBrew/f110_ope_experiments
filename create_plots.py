@@ -10,23 +10,13 @@ from tqdm import tqdm
 import os
 from ope_methods.dataset import create_save_dir
 
-parser = argparse.ArgumentParser(description='Train model based approaches')
 
-# target reward
-parser.add_argument('--target_reward', type=str, default="reward_progress.json", help="target reward")
-parser.add_argument('--discount', type=float, default=0.99, help="discount factor")
-parser.add_argument('--policy_folder', type=str, default="runs3", help="policy folder")
-parser.add_argument('--dynamics_model', type=str, default="dynamics_model", help="dynamics model")
-parser.add_argument('--split', type=str, default="off-policy", help="split")
-parser.add_argument('--seed', type=int, default=0, help="seed")
-parser.add_argument('--plot', action="store_true", help="plot the results")
-args = parser.parse_args()
 
 from f110_orl_dataset.plot_reward import calculate_discounted_reward, plot_rewards
 from scipy.stats import linregress
 from scipy.stats import spearmanr
 
-def plot_rewards(ground_truth, computed, title = "Ground Truth vs Computed Rewards", save_path = None, plot=False):
+def plot_rewards(ground_truth, computed, title = "Ground Truth vs Computed Rewards", save_path = None, plot=False, method ='Computed Mean Reward' ):
     # Combine the ground truth and computed dictionaries
     combined_data = []
     for agent_name, gt_values in ground_truth.items():
@@ -54,11 +44,11 @@ def plot_rewards(ground_truth, computed, title = "Ground Truth vs Computed Rewar
     plt.plot(space, line, 'r') #label=f'y={slope:.2f}x+{intercept:.2f}\nR²={r_value**2:.2f}')
     # fix the x and y axis to the ground truth
     plt.xlim(5, max(gt_means)+1)
-    plt.ylim(5, max(gt_means)+1)
+    plt.ylim(5, max(max(gt_means), max(computed_means))+1)
     plt.xlabel('Ground Truth Mean Reward')
-    plt.ylabel('Computed Mean Reward')
+    plt.ylabel(method)
     plt.title(title)
-    plt.legend()
+    # plt.legend()
     plt.grid(True)
     if save_path:
         plt.savefig(save_path)
@@ -144,7 +134,7 @@ def main(args):
     # read in computed rewards from json file
     compute_rewards = {}
     save_path = create_save_dir(
-        experiment_directory = "runs3",
+        experiment_directory = "runs",
         algo=args.dynamics_model,
         reward_name=args.target_reward,
         dataset="f110-real-stoch-v2",
@@ -156,8 +146,11 @@ def main(args):
 
     with open(f"{save_path}/results/{args.target_reward}", "r") as f:
         compute_rewards = json.load(f)
+    #target_rewards_folder = "/home/fabian/msc/f110_dope/ws_release/experiments/runs3/Simulation/sim_reward_progress.json"
+    #with open(target_rewards_folder, "r") as f:
+    #    compute_rewards = json.load(f)
 
-    ground_truth_rewards_folder = "/home/fabian/msc/f110_dope/ws_release/experiments/runs3/Ground_truth/progress.json"
+    ground_truth_rewards_folder = f"/home/fabian/msc/f110_dope/ws_release/experiments/runs3/Groundtruth/gt_{args.target_reward}"
     with open(ground_truth_rewards_folder, "r") as f:
         ground_truth_rewards = json.load(f)
     # now we plot 1) spearman correlation 2) mean and std of the discounted rewards
@@ -171,7 +164,8 @@ def main(args):
     plot_rewards(ground_truth_rewards, compute_rewards, title=f"Reward: {args.target_reward}, {args.dynamics_model}, spearman_corr: {spearman_corr:.2f}, p-value: {p_value:.5f}",
                  save_path=f"{save_path}/results/reward_{args.target_reward[:-4]}_spearman_corr.png", plot=args.plot)
     # compute the mse between gt and computed rewards
-    abs = np.mean((np.array(gt_means) - np.array(computed_means)))
+    abs = np.mean(np.abs((np.array(gt_means) - np.array(computed_means))))
+    print(abs)
     abs_std = np.std((np.array(gt_means) - np.array(computed_means)))
     #print(f"MSE: {mse}")
     # plot the bar-chart with st deviations
@@ -181,8 +175,8 @@ def main(args):
 
     # also do the bar chart plots
 
-    plot_bars_from_dicts([ground_truth_rewards, compute_rewards], dict_names=["Ground Truth", "Computed"], add_title=f"Reward: {args.target_reward}, {args.dynamics_model}, Absolute Error: {abs:.2f}",
-                         save_path=f"{save_path}/results/reward_{args.target_reward[:-4]}_bar_chart.png", plot=args.plot)
+    plot_bars_from_dicts([ground_truth_rewards, compute_rewards], dict_names=["Ground Truth", "Computed"], add_title=f"Reward: {args.target_reward}, {args.dynamics_model} , Absolute Error: {abs:.2f},",#",
+                         save_path=f"{save_path}/results/reward_{args.target_reward[:-4]}_bars.png", plot=args.plot)
 
     # save a dictionary with the mse and spearman corr
     results_dict = {"spearman_corr": spearman_corr, "p_value": p_value, "abs": abs, "abs_std": abs_std}
@@ -190,5 +184,16 @@ def main(args):
         json.dump(results_dict, f)
     print(results_dict)
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Train model based approaches')
+
+    # target reward
+    parser.add_argument('--target_reward', type=str, default="reward_progress.json", help="target reward")
+    parser.add_argument('--discount', type=float, default=0.99, help="discount factor")
+    parser.add_argument('--policy_folder', type=str, default="runs3", help="policy folder")
+    parser.add_argument('--dynamics_model', type=str, default="dynamics_model", help="dynamics model")
+    parser.add_argument('--split', type=str, default="off-policy", help="split")
+    parser.add_argument('--seed', type=int, default=0, help="seed")
+    parser.add_argument('--plot', action="store_true", help="plot the results")
+    args = parser.parse_args()
     main(args)
     
