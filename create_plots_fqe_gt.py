@@ -15,8 +15,14 @@ from ope_methods.dataset import create_save_dir
 from f110_orl_dataset.plot_reward import calculate_discounted_reward, plot_rewards
 from scipy.stats import linregress
 from scipy.stats import spearmanr
+from create_plots import plot_bars_from_dicts, plot_rewards
+import seaborn as sns
+plt.rcParams.update({
+    'text.usetex': True,
+    'font.family': 'serif',
+})
 
-def plot_rewards(ground_truth, computed, title = "Ground Truth vs Computed Rewards", save_path = None, plot=False, method ='Computed Mean Reward' ):
+def plot_rewards_new(ground_truth, computed, title = "Ground Truth vs Computed Rewards", save_path = None, plot=False, method ='Computed Mean Reward' ):
     # Combine the ground truth and computed dictionaries
     combined_data = []
     for agent_name, gt_values in ground_truth.items():
@@ -30,94 +36,33 @@ def plot_rewards(ground_truth, computed, title = "Ground Truth vs Computed Rewar
     gt_means = [x[0] for x in combined_data]
     computed_means = [x[1] for x in combined_data]
     labels = [x[2] for x in combined_data]
-    
+    sns.set_theme(style="whitegrid")
+
     # Plot
     plt.figure(figsize=(10, 6))
-    plt.scatter(gt_means, computed_means, color='blue')
-    #for i, label in enumerate(labels):
-    #    plt.text(gt_means[i], computed_means[i], label, fontsize=9)
+    sns.scatterplot(x=gt_means, y=computed_means, color='blue', s=100, alpha=0.7)
     
-    # Fit a line
-    slope, intercept, r_value, p_value, std_err = linregress(gt_means, gt_means)
-    space = np.arange(0,max(gt_means)+3)
-    line = slope * np.array(space) + intercept
-    plt.plot(space, line, 'r') #label=f'y={slope:.2f}x+{intercept:.2f}\nR²={r_value**2:.2f}')
-    # fix the x and y axis to the ground truth
-    plt.xlim(5, max(gt_means)+1)
-    plt.ylim(5, max(max(gt_means), max(computed_means))+1)
-    plt.xlabel('Ground Truth Mean Reward')
-    plt.ylabel(method)
-    plt.title(title)
-    # plt.legend()
-    plt.grid(True)
+    # Ideal line (diagonal where ground truth equals computed rewards)
+    max_val = max(max(gt_means), max(computed_means))+3
+    plt.plot([0, max_val], [0, max_val], 'r', linestyle='--', label='Ideal Fit')
+
+    # Styling
+    plt.xlabel('Real-world Return', fontsize=20)
+    plt.ylabel(method, fontsize=20)
+    plt.title(title, fontsize=22)
+    plt.xlim(0, max(gt_means)+3)
+    plt.ylim(0, max_val)
+    # increase the font size of the ticks
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.tight_layout()
+
     if save_path:
         plt.savefig(save_path)
     if plot:
         plt.show()
     else:
         plt.close()
-def plot_bars_from_dicts(dicts_list, dict_names, add_title="", save_path=None, plot=False):
-    """
-    Plots bar charts for given dictionaries, with data categorized by sub-keys found in the first dictionary.
-
-    :param dicts_list: List of dictionaries with sub-key structured data to plot.
-    :param dict_names: Names corresponding to each dictionary, used as labels.
-    :param add_title: Additional title for the plot.
-    """
-    assert len(dicts_list) == len(dict_names), "Each dictionary must have a corresponding name."
-
-    sub_keys = list(dicts_list[0].keys())  # Sub-keys from the first dictionary
-    num_dicts = len(dicts_list)
-    bar_width = 0.15  # Adjust for spacing
-    colors = plt.cm.viridis(np.linspace(0, 1, len(sub_keys)))
-    num_bars = len(sub_keys)
-    #fig, ax = plt.subplots(figsize=(12, 7))
-    r = np.arange(len(dict_names)) *3
-    import seaborn as sns
-    sns.set_theme(style="whitegrid")
-    plt.figure(figsize=(10, 6))
-
-    print(r)
-    for i, dict_name in enumerate(dict_names):
-        for j, sub_key in enumerate(sub_keys):
-            x_coord = r[i] + j * bar_width - (bar_width * (num_bars - 1) / 2)
-            mean = dicts_list[i][sub_key]['mean']
-            std = dicts_list[i][sub_key]['std']
-            if i == 0:
-                plt.bar(x_coord, mean, yerr=std, width=bar_width, label=sub_key, alpha=0.8, capsize=7, color=colors[j])
-            else:
-                plt.bar(x_coord, mean, yerr=std, width=bar_width, alpha=0.8, capsize=7, color=colors[j])
-
-    #ax.set_xlabel('Sub-keys')
-    #ax.set_ylabel('Values')
-    #ax.set_title(f"{add_title}")
-    #ax.set_xticks(r)
-    #ax.set_xticklabels(dict_names)
-    #plt.xlim(0, 100)
-    plt.ylim(0,100)
-    # set xticks to the middle of the bars, no names
-    plt.xticks(r, [""]*len(dict_names))
-    plt.xticks(fontsize=20)
-    # set size of y tick labels
-    plt.yticks(fontsize=20)
-    plt.xlabel('Agents', fontsize=20)
-
-    plt.ylabel('Sum of discounted reward', fontsize=20)
-    # plt.title('Sum of discounted rewards', fontsize=22)
-
-
-    #ax.legend(loc='upper left', bbox_to_anchor=(1, 1), title="Agents")
-    
-    plt.tight_layout()
-    # plt.show()
-    if save_path is not None:
-        plt.savefig(save_path)
-   
-    if plot:
-        plt.show()
-    else:
-        plt.close()
-
 
 def main(args):
     # load the dataset:
@@ -148,26 +93,13 @@ def main(args):
     print(dataset["actions"].shape)
     trajectories, action_trajectories, terminations, model_names = F110Env.compute_trajectories(dataset["observations"],dataset["actions"], dataset["terminals"], dataset["timeouts"], dataset["model_name"] )
     """
-    # read in computed rewards from json file
-    compute_rewards = {}
-    save_path = create_save_dir(
-        experiment_directory = "runs_mb",
-        algo=args.dynamics_model,
-        reward_name=args.target_reward,
-        dataset="f110-real-stoch-v2",
-        target_policy=args.split,
-        seed = args.seed,
-    )
-    #before save path prepend the current path
-    save_path = os.path.join(os.getcwd(), save_path)
-
-    with open(f"{save_path}/results/{args.target_reward}", "r") as f:
+    target_path = f"/home/fabian/msc/f110_dope/ws_release/experiments/exps/runs_fqe_4_0.0001_0.005_0.0/QFitterDD/f110-real-stoch-v2/250/on-policy/{args.seed}"
+    target_rewards_folder = os.path.join(target_path, args.target_reward) #args.target_reward}"
+    # join(target_path, args.target_reward) #args.target_reward}"
+    with open(target_rewards_folder, "r") as f:
         compute_rewards = json.load(f)
-    #target_rewards_folder = "/home/fabian/msc/f110_dope/ws_release/experiments/runs3/Simulation/sim_reward_progress.json"
-    #with open(target_rewards_folder, "r") as f:
-    #    compute_rewards = json.load(f)
 
-    ground_truth_rewards_folder = f"/home/fabian/msc/f110_dope/ws_release/experiments/Groundtruth/gt_{args.target_reward}"
+    ground_truth_rewards_folder = f"/home/fabian/msc/f110_dope/ws_release/experiments/runs3/Groundtruth/gt_{args.target_reward}"
     with open(ground_truth_rewards_folder, "r") as f:
         ground_truth_rewards = json.load(f)
     # now we plot 1) spearman correlation 2) mean and std of the discounted rewards
@@ -178,12 +110,14 @@ def main(args):
     # Compute Spearman correlation coefficient
     spearman_corr, p_value = spearmanr(gt_means, computed_means)
     #print(f"Spearman Correlation Coefficient: {spearman_corr}, p-value: {p_value}")
-    plot_rewards(ground_truth_rewards, compute_rewards, title=f"Reward: {args.target_reward}, {args.dynamics_model}, spearman_corr: {spearman_corr:.2f}, p-value: {p_value:.5f}",
-                 save_path=f"{save_path}/results/reward_{args.target_reward[:-4]}_spearman_corr.png", plot=args.plot)
-    # compute the mse between gt and computed rewards
+    reward_string = args.target_reward[7:-5]
     abs = np.mean(np.abs((np.array(gt_means) - np.array(computed_means))))
-    print(abs)
+
     abs_std = np.std((np.array(gt_means) - np.array(computed_means)))
+    plot_rewards_new(ground_truth_rewards, compute_rewards, title=f"{reward_string}-reward\n rank-corr: {spearman_corr:.2f} (p={p_value:.3f}), mean-absolute-error: {abs:.1f}",#Reward: {args.target_reward}, {args.dynamics_model}, ",
+                 save_path=f"{target_path}/{args.target_reward[:-5]}_spearman_corr.pdf", plot=args.plot, method="FQE Estimate")
+    # compute the mse between gt and computed rewards
+
     #print(f"MSE: {mse}")
     # plot the bar-chart with st deviations
     gt_stds = [ground_truth_rewards[agent]['std'] for agent in ground_truth_rewards if agent in compute_rewards]
@@ -193,11 +127,11 @@ def main(args):
     # also do the bar chart plots
 
     plot_bars_from_dicts([ground_truth_rewards, compute_rewards], dict_names=["Ground Truth", "Computed"], add_title=f"Reward: {args.target_reward}, {args.dynamics_model} , Absolute Error: {abs:.2f},",#",
-                         save_path=f"{save_path}/results/reward_{args.target_reward[:-4]}_bars.png", plot=args.plot)
+                         save_path=f"{target_path}/gt_fqe_{args.target_reward[:-5]}_bars.png", plot=args.plot)
 
     # save a dictionary with the mse and spearman corr
     results_dict = {"spearman_corr": spearman_corr, "p_value": p_value, "abs": abs, "abs_std": abs_std}
-    with open(f"{save_path}/results/reward_{args.target_reward[:-4]}_metrics.json", "w") as f:
+    with open(f"{target_path}/gt_fqe_{args.target_reward[:-4]}_metrics.json", "w") as f:
         json.dump(results_dict, f)
     print(results_dict)
 if __name__ == "__main__":

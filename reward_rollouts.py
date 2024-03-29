@@ -35,7 +35,7 @@ def main(args):
     torch.manual_seed(args.seed)
     
     save_path = ope_methods.dataset.create_save_dir(
-        experiment_directory = "test",
+        experiment_directory = "runs_mb",
         algo=args.dynamics_model,
         reward_name="reward_progress",
         dataset="f110-real-stoch-v2",
@@ -74,7 +74,7 @@ def main(args):
     )
     #load the train, val and test indices
     #train_indices = np.load(os.path.join(save_path, "train_indices.npy"))
-    val_indices = np.load(os.path.join("/home/fabian/msc/f110_dope/ws_release/experiments/runs", "val_indices.npy"))
+    val_indices = np.load(os.path.join("/home/fabian/msc/f110_dope/ws_release/experiments/runs_mb", "val_indices.npy"))
     #test_indices = np.load(os.path.join(save_path, "test_indices.npy"))
     #train_subset = Subset(behavior_dataset, train_indices)
     #test_subset = Subset(behavior_dataset, test_indices)

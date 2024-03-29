@@ -28,7 +28,7 @@ parser = argparse.ArgumentParser(description='Train model based approaches')
 parser.add_argument('--seed', type=int, default=0, help="seed")
 parser.add_argument('--eval_interval', type=int, default=5_000, help="eval interval")
 parser.add_argument('--update_steps', type=int, default=100_000, help='update steps')
-parser.add_argument('--split', type=str, default="on-policy", help="split")
+parser.add_argument('--split', type=str, default="off-policy", help="split")
 parser.add_argument('--dynamics_model', type=str, default="DeltaDynamicsModel", help="dynamics model")
 parser.add_argument('--train', action='store_true', help="train")
 parser.add_argument('--save_model', action='store_true', help="save model")
@@ -176,7 +176,7 @@ def main(args):
     torch.manual_seed(args.seed)
 
     save_path = ope_methods.dataset.create_save_dir(
-        experiment_directory = "runs",
+        experiment_directory = "runs_mb",
         algo=args.dynamics_model,
         reward_name="reward_progress",
         dataset="f110-real-stoch-v2",
